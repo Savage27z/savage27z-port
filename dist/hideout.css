@@ -206,25 +206,27 @@ body:not([data-view="home"]) .chapter-tag{opacity:0}
 @media(max-width:700px){
   #hideout{min-height:440px}
   .topbar{padding:16px;gap:12px}
-  .wordmark{font-size:18px}
+  .wordmark{display:inline-flex;align-items:center;min-height:40px;font-size:18px}
   .place-label{display:none}
-  .basic-link{padding:8px 12px;font-size:12px;line-height:16px;min-height:36px}
+  .basic-link{padding:8px 12px;font-size:12px;line-height:16px;min-height:40px}
   .chapter-tag{display:none}
   .bottom-bar{bottom:max(16px,env(safe-area-inset-bottom));left:12px;right:12px;display:flex;flex-direction:column;gap:8px}
   .dock{width:min(100%,460px);justify-content:space-between;gap:2px}
   .dock button{flex:1;justify-content:center;gap:4px;padding:8px;font-size:14px}
   .dock-number,.dock .i{display:none}
   .experience-controls{order:-1;align-self:center}
-  .object-actions{right:12px;bottom:128px;gap:8px}
-  .object-actions .pill{min-height:36px;padding:8px 12px;font-size:12px;line-height:16px}
-  .hotspot{gap:8px;padding:4px 12px 4px 4px}
+  .object-actions{right:12px;bottom:136px;gap:8px}
+  .object-actions .pill{min-height:40px;padding:8px 12px;font-size:12px;line-height:16px}
+  .hotspot{gap:8px;padding:6px 12px 6px 6px}
   .hotspot>span:not(.hotspot-number){font-size:0;line-height:0;letter-spacing:0}
   .hotspot small{margin:0;font-size:14px;line-height:20px}
-  .experience-controls button{min-height:32px;padding:4px 12px}
+  .experience-controls button{min-height:40px;padding:8px 12px}
   .hotspot-number{width:28px;height:28px}
   .hotspot::after{height:16px}.hotspot::before{top:calc(100% + 16px)}
   .intro-title span{font-size:48px}
-  .panel,.terminal-window,.journal-window,.radio-window{left:12px!important;right:12px!important;top:76px!important;bottom:112px!important;width:auto!important;height:auto!important;transform:none}
+  .panel,.terminal-window,.journal-window,.radio-window{left:12px!important;right:12px!important;top:76px!important;bottom:120px!important;width:auto!important;height:auto!important;transform:none}
+  /* Short panels hug their content instead of stretching to full height. */
+  .journal-window,.radio-window{bottom:auto!important;max-height:calc(100% - 196px)}
   .panel-header,.terminal-window .panel-header{padding:12px 12px 12px 16px}
   .panel-header h2{font-size:18px}
   .close-panel{width:36px;height:36px}
@@ -241,7 +243,7 @@ body:not([data-view="home"]) .chapter-tag{opacity:0}
   .journal-content h2,.radio-content h2{font-size:30px;line-height:36px}
   .radio-content{padding:16px 16px 24px}
   .email-link{font-size:16px;line-height:24px}
-  .toast{bottom:136px;border-radius:24px;flex-wrap:wrap;justify-content:flex-end;padding:12px 12px 12px 16px}
+  .toast{bottom:136px;z-index:21;border-radius:24px;flex-wrap:wrap;justify-content:flex-end;padding:12px 12px 12px 16px}
 }
 @media(max-height:620px) and (min-width:701px){
   .topbar{padding-top:16px}.chapter-tag{display:none}.bottom-bar{bottom:12px}
@@ -249,4 +251,6 @@ body:not([data-view="home"]) .chapter-tag{opacity:0}
   .journal-content h2,.radio-content h2{font-size:30px;line-height:36px}
 }
 @media(max-height:500px){body{overflow:auto}#hideout{height:600px}.panel{bottom:96px!important}}
+/* While the slow-device notice shows, it takes the place of the resident buttons. */
+body:has(#toast:not([hidden])) .object-actions{visibility:hidden}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

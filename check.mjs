@@ -54,7 +54,7 @@ for (const file of modules) {
   for (const match of read('dist/' + file).matchAll(/(?:from |import\()['"](\.\/[^'"]+)['"]/g)) assert.ok(fs.existsSync('dist/' + match[1]), file + ': missing import ' + match[1]);
 }
 assert.ok(index.includes('vibe building tools so you don’t have to'));
-assert.ok(index.includes('Vibe building tools<br>so you don’t have to'));
+assert.ok(index.includes('Vibe building tools <br>so you don’t have to'), 'Hero keeps a space before its line break, so the words never merge when the break is hidden');
 assert.ok(hideout.includes('City sound off') && hideout.includes('data-leave-3d'));
 assert.ok(index.includes('data-enter-3d'));
 
@@ -317,7 +317,7 @@ for (const [width, height] of [[1920, 972], [1440, 900], [1024, 768], [390, 844]
       for (const [key, anchor] of Object.entries(world.anchors)) {
         const p = anchor.clone().project(camera);
         const preferred = { x: (p.x * .5 + .5) * width, y: (-p.y * .5 + .5) * height - 18 };
-        const size = { width: (mobile ? 120 : key === 'projects' ? 190 : 170) * textScale, height: (mobile ? 40 : 60) * textScale };
+        const size = { width: (mobile ? 120 : key === 'projects' ? 190 : 170) * textScale, height: (mobile ? 44 : 60) * textScale };
         const oldRect = { left: preferred.x - size.width / 2, right: preferred.x + size.width / 2, top: preferred.y - size.height, bottom: preferred.y };
         if (overlaps(oldRect, head)) oldLabelOverlapDetected = true;
         const placement = placeHotspot(preferred, size, bounds, obstacles);

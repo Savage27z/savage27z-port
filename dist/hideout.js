@@ -47,7 +47,15 @@ export function selectProject(id, updateAddress = true) {
   $('#project-detail').scrollTop = 0;
   $$('.project-select').forEach(b => b.setAttribute('aria-current', String(b.dataset.project === id)));
   $('#archive-position').textContent = numberLabel(index + 1) + ' / ' + projectCount;
+  revealTab(id);
   if (updateAddress && currentView === 'projects') writeAddress('projects', false);
+}
+// Centre the selected tab in the phone's horizontal project strip. Only the
+// strip scrolls; scrollIntoView could also shift the clipped scene container.
+function revealTab(id) {
+  const strip = $('#project-index'), tab = $('.project-select[data-project="' + id + '"]');
+  if (!strip.clientWidth || !tab || strip.scrollWidth <= strip.clientWidth) return;
+  strip.scrollLeft = tab.offsetLeft - (strip.clientWidth - tab.offsetWidth) / 2;
 }
 function writeAddress(view, push = true) {
   const hash = view === 'home' ? '#home' : '#' + view + (view === 'projects' ? '/' + currentProject : '');
@@ -79,7 +87,7 @@ export async function setView(view, { address = true, focus = true } = {}) {
   updateHint();
   if (scene) await scene.focus(view, !motion || previous === view);
   if (sequence !== epoch) return;
-  if (view !== 'home') showPanel(view, focus);
+  if (view !== 'home') { showPanel(view, focus); if (view === 'projects') revealTab(currentProject); }
   else if (focus && previous !== 'home') {
     (returnFocus?.isConnected ? returnFocus : $('#navigation [data-view="home"]')).focus({ preventScroll: true });
   }

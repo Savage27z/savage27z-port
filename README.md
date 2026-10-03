@@ -17,6 +17,7 @@ Layout after thegreatola.com: hero, proof strip, selected work, services, about,
 
 Sections and behaviour:
 - **Work**: renders from `projects.js`, with filters for All, AI, Onchain, 3D and games, and Tools. Plot is the featured card. Old links like `#projects/sumi` scroll to and highlight that card.
+- **Recognition**: 6× hackathon winner (stated by the owner; also in the proof strip), plus the Kane CLI Hackathon certificate of participation from TestMu AI. The 3D journal repeats both.
 - **More live builds**: lists your other deployed GitHub repos.
 - **Contact**: a brief form that opens the visitor's email app with the brief filled in, or copies it. No server needed.
 - **404 page**: branded.
@@ -69,6 +70,7 @@ node update-github.mjs
 
 ## Assets
 - `hideout.webp`, `hideout-portrait.webp`, `resident.webp` and `og.jpg` are renders of the 3D scene. To re-capture them, add `?capture` to the hideout URL: this disables the intro and slow-device fallbacks, and exposes `window.__hideout.pose(position, target)` for framing and `window.__hideout.blink(closed)` for checking the eyes.
+- `certificate-kane-cli.png` is the owner's TestMu AI certificate, shown as issued, name included.
 - Twelve project previews are captured from the real public frontends. Sumi and Vandal show their title screens. Recon, Redstring and REVOKED have no confirmed public demo and link to source only.
 - `rooftop.webp` and `rooftop-mobile.webp` (the original illustration) are no longer referenced by either page.
 - Icons are Phosphor (MIT), inlined as an SVG sprite. Manrope is loaded from Google Fonts.
