@@ -171,10 +171,10 @@ export function buildWorld(makeLabel, previewTexture) {
   rod([3.7, 1.2, 2.4], [3.09, 1.99, 2.28], .04, 0x6a5149);
   rod([3.68, 1.5, 2.4], [4.19, 2.1, 2.55], .04, 0x6a5149);
   const blossomGeometry = new T.IcosahedronGeometry(.6, 1);
-  for (const [x,y,z,s,c] of [[3.66,2.33,2.4,1,0xc78b9a],[3.13,2.14,2.24,.7,0xd69fa6],[4.17,2.18,2.55,.78,0xb57691],[3.68,2.64,2.3,.64,0xe1a6ab],[3.45,2.08,2.84,.7,0xcc8d9b]]) mesh(blossomGeometry,c,x,y,z).scale.set(s,s*.65,s);
+  for (const [x,y,z,s,c] of [[3.66,2.33,2.4,1,0xe592ad],[3.13,2.14,2.24,.7,0xf2a9be],[4.17,2.18,2.55,.78,0xd9799c],[3.68,2.64,2.3,.64,0xf7bccb],[3.45,2.08,2.84,.7,0xea96b0]]) mesh(blossomGeometry,c,x,y,z).scale.set(s,s*.65,s);
   // Small sleeping cat. Its silhouette is geometry, not a copied anime character.
   const cat = new T.Group(); cat.position.set(1.58, .09, 2.57); cat.rotation.y = -.25; root.add(cat);
-  const fur = 0xcbbda0;
+  const fur = 0xdcc6a2;
   const catBody = mesh(new T.SphereGeometry(.35, 12, 8), fur, 0, .23, 0, cat); catBody.scale.set(1.3,.7,.86);
   catBody.userData.view = 'cat'; pickables.push(catBody);
   const catHead = mesh(new T.SphereGeometry(.21, 12, 8), fur, -.28, .29, .15, cat);
@@ -189,7 +189,7 @@ export function buildWorld(makeLabel, previewTexture) {
 
   const avatar = buildAvatar();
   root.add(avatar.seating); pickables.push(...avatar.pickables);
-  const { character, head, arm } = avatar;
+  const { character, head, arm, torso, blink } = avatar;
 
   // Strung paper lanterns and a fabric banner, framing the little world.
   const lineCurve = new T.CatmullRomCurve3([new T.Vector3(-3.6,3.95,-1.4),new T.Vector3(.2,3.72,-2),new T.Vector3(4.4,4.55,-2.2)]);
@@ -215,8 +215,9 @@ export function buildWorld(makeLabel, previewTexture) {
   }
   root.updateMatrixWorld(true);
   return { root, pickables, lanterns, cat, catBody, catHead, catTail, catLegs, character, characterHead:head, waveArm:arm,
-    seating:avatar.seating, faceViewer:avatar.faceViewer,
-    animatables:[cat,catBody,catHead,catTail,...catLegs,head,arm], screen, screenCenter, screenWidth, screenHeight,
+    seating:avatar.seating, faceViewer:avatar.faceViewer, torso, blink,
+    animatables:[cat,catBody,catHead,catTail,...catLegs,head,arm,torso], screen, screenCenter, screenWidth, screenHeight,
+    glows: { door: new T.Vector3(-3.13,1.72,-.8), screen: screenCenter.clone() },
     anchors: { projects: new T.Vector3(.4,3.49,-1.1), about: new T.Vector3(-2.7,1.2,1.6), contact: new T.Vector3(3.3,1.76,.45) },
     targets: { projects: screenCenter.clone(), about: new T.Vector3(-2.65,.84,1.4), contact: new T.Vector3(3.25,1.06,.25) }
   };

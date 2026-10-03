@@ -8,14 +8,13 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 const getPref = key => { try { return localStorage.getItem(key); } catch { return null; } };
 const savePref = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
 let currentView = 'home', currentProject = 'plot', epoch = 0, scene = null, loading = null;
-let lightweight = getPref('savage-view-mode') === 'light' ||
-  (!getPref('savage-view-mode') && (reduce.matches || navigator.connection?.saveData || navigator.deviceMemory <= 2));
 let motion = !reduce.matches && getPref('savage-motion') !== 'off';
 let returnFocus = null;
 const ambience = createAmbience();
 let soundOn = false;
 const numberLabel = value => String(value).padStart(2, '0');
 const projectCount = numberLabel(projects.length);
+const icon = name => '<svg class="i" aria-hidden="true"><use href="#i-' + name + '"/></svg>';
 
 $('#project-count').textContent = projectCount;
 $('#project-index').innerHTML = projects.map((p, i) =>
@@ -28,21 +27,21 @@ export function selectProject(id, updateAddress = true) {
   currentProject = id;
   scene?.setProjectPreview(project.image, project.name);
   const index = projects.indexOf(project);
-  const game = ['sumi', 'vandal'].includes(id);
+  const game = project.groups.includes('games');
   $('#project-detail').innerHTML =
     '<div class="project-topline"><div><h3>' + project.name + '</h3><p class="project-category">' +
-    (id === 'plot' ? 'FEATURED / ' : '') + project.type + '</p></div><div class="project-links">' +
+    (project.featured ? 'FEATURED / ' : '') + project.type + '</p></div><div class="project-links">' +
     (project.url ? '<a href="' + project.url + '" target="_blank" rel="noopener noreferrer">' +
-    (game ? 'Play game' : 'Live site') + ' ↗</a>' : '') +
+    (game ? 'Play game' : 'Live site') + icon('arrow-up-right') + '</a>' : '') +
     '<a class="secondary" href="https://github.com/Savage27z/' + project.repo +
-    '" target="_blank" rel="noopener noreferrer">Source ↗</a></div></div>' +
+    '" target="_blank" rel="noopener noreferrer">Source' + icon('arrow-up-right') + '</a></div></div>' +
     '<p class="project-purpose">' + project.short + '</p>' +
     (project.image ? '<figure class="preview"><img src="/assets/' + project.image +
     '.webp" alt="' + project.name + (game ? ' real game title screen' : ' actual landing page') +
     '" width="1350" height="930" decoding="async"><figcaption>' +
-    (game ? 'REAL TITLE SCREEN / GAMEPLAY NOT CAPTURED' : 'REAL FRONTEND / OPEN LIVE SITE TO INTERACT') +
+    (game ? 'Real title screen · gameplay not captured' : 'Real front end · open the live site to interact') +
     '</figcaption></figure>' : '<p class="source-note">Source available. No confirmed public demo—explore the repository below.</p>') +
-    '<details class="project-notes"><summary>About this project</summary><p class="project-description">' + project.detail + '</p><div class="tags">' +
+    '<details class="project-notes"><summary>About this project' + icon('plus') + '</summary><p class="project-description">' + project.detail + '</p><div class="tags">' +
     project.tags.map(t => '<span>' + t + '</span>').join('') + '</div></details>' +
     '<div class="project-next"><span>Got an idea of your own?</span><button data-view="contact">Let’s build yours ↗</button></div>';
   $('#project-detail').scrollTop = 0;
@@ -78,7 +77,7 @@ export async function setView(view, { address = true, focus = true } = {}) {
   if (address) writeAddress(view);
   $('#announcement').textContent = view === 'home' ? 'Back at the hideout.' : 'Opening ' + view + '.';
   updateHint();
-  if (scene && !lightweight) await scene.focus(view, !motion || previous === view);
+  if (scene) await scene.focus(view, !motion || previous === view);
   if (sequence !== epoch) return;
   if (view !== 'home') showPanel(view, focus);
   else if (focus && previous !== 'home') {
@@ -86,61 +85,71 @@ export async function setView(view, { address = true, focus = true } = {}) {
   }
 }
 function updateHint(message) {
-  $('#scene-hint').textContent = message || (lightweight ? 'LIGHTWEIGHT VIEW / SAME WORK, LESS MOTION' :
-    currentView === 'home' ? 'DRAG TO LOOK AROUND · SELECT AN OBJECT' : 'ESC TO RETURN TO THE ROOFTOP');
+  $('#scene-hint').textContent = message || (body.dataset.mode !== '3d' ? 'Getting the hideout ready…' :
+    currentView === 'home' ? 'Drag to look around · select an object' : 'Esc to return to the rooftop');
+}
+function setToggle(button, pressed, iconName, text) {
+  button.setAttribute('aria-pressed', String(pressed));
+  button.innerHTML = icon(iconName) + '<span>' + text + '</span>';
 }
 function setMotion(value) {
   motion = value && !reduce.matches;
   savePref('savage-motion', motion ? 'on' : 'off');
-  $('#motion-toggle').textContent = motion ? 'Motion on' : 'Motion off';
-  $('#motion-toggle').setAttribute('aria-pressed', String(!motion));
+  setToggle($('#motion-toggle'), !motion, motion ? 'pause' : 'play', motion ? 'Motion on' : 'Motion off');
   scene?.setMotion(motion);
+}
+function progress(fraction, line) {
+  $('#loader-progress').style.transform = 'scaleX(' + fraction + ')';
+  if (line) $('#loader-line').textContent = line;
+}
+function showToast(text) {
+  $('#toast-text').textContent = text;
+  $('#toast').hidden = false;
 }
 async function enableScene() {
   if (scene) return scene;
   if (loading) return loading;
   loading = (async () => {
     try {
+      progress(.3, 'Carrying three.js up the stairs…');
       const module = await import('./scene.js');
+      progress(.7, 'Hanging the lanterns…');
       scene = await module.createScene($('#scene'), {
         onSelect: action => ['cat', 'character'].includes(action) ? interact(action) : setView(action),
-        onSlow: () => switchMode(true, 'Switched to lightweight view to keep things responsive.'),
+        onSlow: hard => {
+          if (hard) fail();
+          else showToast('The hideout was running slowly here, so the extra effects are off.');
+        },
         onPanelRect: rect => {
           const panel = $('#projects-panel');
           if (!rect) { panel.removeAttribute('style'); return; }
           Object.assign(panel.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px', height: rect.height + 'px' });
-        }
+        },
+        onHover: view => $$('.hotspot').forEach(spot => spot.classList.toggle('is-hovered', spot.dataset.view === view)),
+        onIntro: active => { body.dataset.intro = String(active); }
       });
       scene.setMotion(motion);
       const selected = projects.find(p => p.id === currentProject);
       scene.setProjectPreview(selected.image, selected.name);
-      if (lightweight) scene.setEnabled(false);
-      else {
-        body.dataset.mode = '3d';
-        scene.setEnabled(true);
-        await setView(currentView, { address: false, focus: false });
-        updateHint();
-      }
+      progress(1, 'Here we are.');
+      body.dataset.mode = '3d';
+      scene.setEnabled(true);
+      if (currentView === 'home') scene.intro();
+      await setView(currentView, { address: false, focus: false });
+      updateHint();
       return scene;
     } catch (error) {
-      console.warn('3D is unavailable; all portfolio sections remain available.', error);
-      switchMode(true, '3D isn’t available here. All projects are available in lightweight view.');
+      console.warn('3D is unavailable; the basic page has every section.', error);
+      fail();
       return null;
     } finally { loading = null; }
   })();
   return loading;
 }
-async function switchMode(value, message) {
-  lightweight = value;
-  savePref('savage-view-mode', value ? 'light' : '3d');
-  body.dataset.mode = value ? 'light' : scene ? '3d' : 'loading';
-  $('#mode-toggle').textContent = value ? 'Enter 3D hideout' : 'Lightweight view';
-  $('#mode-toggle').setAttribute('aria-pressed', String(value));
-  $('#projects-panel').removeAttribute('style');
-  scene?.setEnabled(!value);
-  if (!value) await enableScene();
-  await setView(currentView, { address: false, focus: false });
-  updateHint(message);
+function fail() {
+  body.dataset.mode = 'error';
+  $('#fallback').hidden = false;
+  scene?.setEnabled(false);
 }
 document.addEventListener('click', event => {
   const viewButton = event.target.closest('[data-view]');
@@ -150,16 +159,17 @@ document.addEventListener('click', event => {
   if (projectButton) selectProject(projectButton.dataset.project);
   const actionButton = event.target.closest('[data-action]');
   if (actionButton) interact(actionButton.dataset.action);
+  if (event.target.closest('[data-leave-3d]')) savePref('savage-view-mode', 'light');
 });
 async function interact(action) {
   if (action === 'cat') {
-    if (scene && !lightweight) {
+    if (scene) {
       scene.playCat();
       $('#announcement').textContent = motion ? 'The cat stretches, finds another spot and curls up.' : 'The cat has moved to another resting spot.';
-    } else $('#announcement').textContent = 'Enter the 3D hideout to meet the cat.';
+    }
   } else if (action === 'character') {
     const sequence = epoch;
-    if (scene && !lightweight) await scene.wave();
+    if (scene) await scene.wave();
     if (sequence === epoch && currentView === 'home') setView('about');
   }
 }
@@ -167,20 +177,18 @@ $('#sound-toggle').addEventListener('click', async () => {
   const button = $('#sound-toggle'); button.disabled = true;
   try {
     soundOn = await ambience.setEnabled(!soundOn);
-    button.textContent = soundOn ? 'City sound on' : 'City sound off';
-    button.setAttribute('aria-pressed', String(soundOn));
+    setToggle(button, soundOn, soundOn ? 'speaker-high' : 'speaker-slash', soundOn ? 'City sound on' : 'City sound off');
   } catch { $('#announcement').textContent = 'Audio isn’t available in this browser.'; }
   finally { button.disabled = false; }
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     soundOn = false; ambience.setEnabled(false);
-    $('#sound-toggle').textContent = 'City sound off';
-    $('#sound-toggle').setAttribute('aria-pressed', 'false');
+    setToggle($('#sound-toggle'), false, 'speaker-slash', 'City sound off');
   }
 });
-$('#mode-toggle').addEventListener('click', () => switchMode(!lightweight));
 $('#motion-toggle').addEventListener('click', () => setMotion(!motion));
+$('#toast-close').addEventListener('click', () => { $('#toast').hidden = true; });
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && currentView !== 'home') { event.preventDefault(); setView('home'); }
   const choice = event.target.closest?.('.project-select');
@@ -205,11 +213,6 @@ window.addEventListener('popstate', readAddress);
 window.addEventListener('hashchange', readAddress);
 selectProject('plot', false);
 setMotion(motion);
-body.dataset.mode = lightweight ? 'light' : 'loading';
-$('#mode-toggle').textContent = lightweight ? 'Enter 3D hideout' : 'Lightweight view';
-$('#mode-toggle').setAttribute('aria-pressed', String(lightweight));
 readAddress();
-if (!lightweight) {
-  if ('requestIdleCallback' in window) requestIdleCallback(enableScene, { timeout: 900 });
-  else setTimeout(enableScene, 50);
-}
+if ('requestIdleCallback' in window) requestIdleCallback(enableScene, { timeout: 600 });
+else setTimeout(enableScene, 50);

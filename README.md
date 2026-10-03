@@ -1,26 +1,94 @@
 # SAVAGE 愛
 
-An original anime-inspired, interactive rooftop hideout. Built as static HTML/CSS with a progressively loaded Three.js world. The scene is centered without the earlier introduction/text block. A full apartment building supports the rooftop, surrounded by neighboring buildings, windows and streets. A custom workstation, open journal and pocket radio reveal projects, About and Contact. The seated avatar has a broad anime face, black braids, oversized graphic eyes, red cheek marks and a plain black shirt, modelled from the user's supplied Twitter PFP. Its hands rest in its lap and its head turns toward the actual camera position. The seat is beside the workstation, clear of the Projects camera path. It is a stylized 3D adaptation, not a pixel-exact reproduction. No screenshot/browser chrome or assets from the reference video are included.
+vibe building tools so you don’t have to….
 
-## Content
-Approved identity, tagline and bio. Fifteen selected public projects: Plot (featured), ShipZen, Ditto, Vault30, Sumi, Vandal, Recon, Prowl, Redstring, Rewind, SceneSound, VeriGen, Franchisa, REVOKED and Collect. Descriptions grounded in the owner's repository READMEs and frontend sources. Each preview has a visible one-line purpose, expandable implementation context and a button opening Contact. No fabricated achievements, customer metrics or experience claims.
+A static portfolio with two ways in: a fast, editorial **basic page** (`/`) and an interactive **3D rooftop hideout** (`/hideout.html`). No framework, no build step. Serve `dist/` as static files.
 
-## Performance choices
-No framework runtime. System fonts. Locally hosted Three.js r170, dynamically imported during idle time. No video, iframes, runtime API requests, physics, shadow maps or post-processing. Repeated geometry, braids, neighborhood details and city windows use instancing. The rooftop and its residents total about 12,000 triangles before the surrounding buildings. One WebGL context, capped pixel ratio (1 on mobile, at most 1.5 on desktop), bounded camera moves and short lantern idle animation. The render loop stops at rest, offscreen and in background tabs. Sustained slow frames trigger lightweight view. Reduced-motion, Save-Data and low-memory devices default to lightweight view unless the visitor explicitly chooses 3D. Motion and lightweight-mode preferences are device-local.
+## Basic page (`index.html`, `site.css`, `site.js`)
+Layout after thegreatola.com: hero, proof strip, selected work, services, about, contact. The look follows uphive.xyz (dark olive canvas, lime accent, pill buttons, numbered steps, FAQ, lime closing band). The visual rules come from the `landing-page-design` skill in elayadesign/ai-design-skills:
 
-## Resident and sound interactions
-Click the cat or its keyboard-accessible button to wake it, stretch, walk to its other resting spot and curl up. Click the avatar or Say hello to wave and open About. These finite animations complete and stop; reduced motion switches positions without travel. Selecting a project updates the physical monitor, with screenshot first and details expandable. Previous GPU preview textures are disposed when replaced; out-of-order loads cannot overwrite the latest selection. City sound is locally synthesized wind/traffic-style ambience, off by default, started only by an explicit button gesture. It suspends and resets to off in background tabs; no microphone or network audio is used.
+- **Type and spacing**: one typeface (Manrope), no italics, Tailwind type-scale sizes only, spacing tokens from 2 to 96px, Tailwind radii.
+- **Backgrounds**: flat everywhere. The only gradient is on the hero heading text.
+- **Navigation**: a floating glass pill nav. On mobile the hamburger morphs into an X and opens a blurred overlay.
+- **Motion**: blur fade-up reveals via IntersectionObserver, and a word-by-word tagline reveal, all on one custom easing curve. Reduced motion is respected.
+- **Themes**: dark by default, with a light theme in thegreatola's paper tones.
 
-## Navigation and accessibility
-Mouse/touch drag changes the overview angle within bounded limits. All three interactive objects also have labelled HTML hotspot buttons and persistent navigation buttons. Camera movement is skipped with reduced motion. Projects use real, readable HTML aligned with the physical monitor on desktop; phones use a larger, scrollable panel with a horizontal project selector. Arrow keys move through the selector; Home and End jump to the first and last projects. Archive numbering and the 3D monitor's project count come from the project data. Escape returns home, browser Back restores sections, and focus returns to the originating control. Direct hash links such as #projects/plot work. All fifteen repositories and email remain linked without JavaScript. WebGL failure leaves the complete HTML archive available.
+`check.mjs` enforces these rules.
+
+Sections and behaviour:
+- **Work**: renders from `projects.js`, with filters for All, AI, Onchain, 3D and games, and Tools. Plot is the featured card. Old links like `#projects/sumi` scroll to and highlight that card.
+- **More live builds**: lists your other deployed GitHub repos.
+- **Contact**: a brief form that opens the visitor's email app with the brief filled in, or copies it. No server needed.
+- **404 page**: branded.
+- **Images**: the share card (`assets/og.jpg`), the hero card and the about portrait are real renders of the 3D scene.
+
+## GitHub numbers (`github.js`, `update-github.mjs`)
+The proof strip counts your public, non-fork repos: projects, live demos (repos with a homepage URL), projects started in the last year, and programming languages. Your profile README, the GitHub exercise repos and the empty `code` repo are excluded.
+
+The page shows the saved snapshot immediately, then refreshes it from the public GitHub API once per session. If the API is unreachable, the snapshot stays.
+
+To refresh the snapshot and the no-JavaScript fallbacks:
+
+```
+node update-github.mjs
+```
+
+## 3D hideout (`hideout.html`, `hideout.js`, `scene.js`, `atmosphere.js`, `world.js`, `avatar.js`)
+
+**Scene**
+- An anime-style rooftop with three-step toon shading.
+- Cool moonlight casts soft shadows on desktop. Lanterns, the door and the monitor are warm practical lights with glow halos.
+- A gradient night sky, twinkling stars, a haloed moon and drifting clouds.
+- Blinking red beacons on the distant towers, and sakura petals blowing off the potted tree.
+
+**Resident**
+- Styled after the owner's current PFP: fluffy white hair, sleepy half-lidded yellow-green eyes with tired creases, and a dark teal turtleneck.
+- Built the way anime-style 3D characters usually are: a smooth head with the face painted onto it (a canvas texture, with an open and a closed version for blinking), hair made of tapered locks over a scalp cap, and an ink outline. Face and hair use their own gentle shading and take no cast shadows.
+- A stylized adaptation, not a reproduction.
+- It blinks, breathes, and turns to face the camera. The cat breathes and flicks its tail, and the lanterns sway.
+
+**Camera**
+- The opening shot looks up at the moon, then cranes down onto the roof.
+- Mouse movement adds subtle parallax, and drag orbits within bounded limits.
+
+**Interaction**
+- The workstation opens the project archive, the journal opens about, and the pocket radio opens contact.
+- "Say hello" waves; "Wake the cat" sends it to its other spot.
+- City sound is synthesized locally, and stays off until clicked.
+
+**Performance**
+- Ambient animation is capped at about 30 fps and sleeps after 90 seconds without interaction.
+- It stops entirely with reduced motion, in background tabs, or offscreen.
+- Sustained slow frames step quality down (shadows, then petals, clouds and extra lights, then static), with a prompt to switch to the basic page.
+- If WebGL fails, the page shows a fallback that links to the basic page.
+- Static parts are instanced or merged: about 155 draw calls and 23k triangles for the rooftop model. Most of the triangles are the resident's smooth head, hair and outline.
+
+**Navigation**
+- Choosing "3D hideout" on the basic page is remembered, so the next fresh visit to `/` opens the hideout. "Basic page" switches back.
+- Back and forward navigation never bounces between the two pages.
 
 ## Assets
-Original rooftop illustration from the first revision is reused for lightweight mode; no new generation credits were spent for this revision. The Three.js environment is original modelled geometry with text-only label textures. The earlier illustration was generated with Higgsfield (one generation, 2-credit estimate; requested nano_banana_pro, returned nano_banana_2). Twelve project previews are captured from actual public frontends, not generated. Only the selected project's preview is loaded, with no galleries preloaded or live iframe embeds. Sumi and Vandal previews show their real title screens, not gameplay. Recon, Redstring and REVOKED have no confirmed working public demo and use a clear source-available message. The reference video is not included in the site.
-
-The eight additions were checked against public GitHub READMEs and repository metadata on 2026-09-08. Six public landing pages were captured: prowl-ebon.vercel.app, rewind-app.vercel.app, scene-sound-three.vercel.app, verigens.vercel.app, franchisa.vercel.app and collect-nimiq.vercel.app. Redstring's named domain returned an unavailable gateway; REVOKED documents local demo setup. Frontend captures establish appearance and availability at capture time, not independently verified usage statistics or end-to-end product functionality. Project copy preserves testnet and simulated-demo context where relevant.
+- `hideout.webp`, `hideout-portrait.webp`, `resident.webp` and `og.jpg` are renders of the 3D scene. To re-capture them, add `?capture` to the hideout URL: this disables the intro and slow-device fallbacks, and exposes `window.__hideout.pose(position, target)` for framing and `window.__hideout.blink(closed)` for checking the eyes.
+- Twelve project previews are captured from the real public frontends. Sumi and Vandal show their title screens. Recon, Redstring and REVOKED have no confirmed public demo and link to source only.
+- `rooftop.webp` and `rooftop-mobile.webp` (the original illustration) are no longer referenced by either page.
+- Icons are Phosphor (MIT), inlined as an SVG sprite. Manrope is loaded from Google Fonts.
 
 ## Verification
-Run node check.mjs for syntax, local assets, content, navigation state, link safety, geometry bounds and rendering-budget safeguards. Raycasting regression checks cover the resident's clearance throughout the Projects camera transition at phone and desktop sizes, plus eye visibility across the permitted viewing angles. HTML hotspot labels avoid the projected bounds of the entire head and one another, using actual label dimensions cached by ResizeObserver. Rectangle regression checks reproduce the reported label overlap and check clearance at different camera angles, viewport sizes and text sizes. These are static, geometry and simulated-DOM checks, not browser screenshots, physical-device benchmarks or measured frame rates.
+Run:
+
+```
+node check.mjs
+```
+
+It covers:
+- **Pages**: syntax, local assets, icon references, link safety and no-script fallbacks on all three pages.
+- **Design rules** on the basic page.
+- **Data**: card rendering, filter counts, the GitHub summariser (forks excluded) and the stat fallbacks.
+- **Hideout app**: a simulated DOM run through every view, focus return, keyboard navigation, history and sound.
+- **3D model**: model budgets, viewport bounds, and that both eyes stay visible past the hair from every allowed angle.
+- **Camera and labels**: the Projects camera path stays clear of the resident, and hotspot labels stay clear of the head at measured label sizes.
+
+Visuals were reviewed with headless Chrome screenshots; real-device frame rates are not measured.
 
 ## Serving
-Serve dist as static files. No server keys, wallet connection or paid AI calls are made by this portfolio. Contact links open mail, X or Telegram. Hosted via Sites with identity in .openai/hosting.json.
+Static hosting of `dist/`, with identity in `.openai/hosting.json`. No server keys, wallet connections or paid API calls. Runtime requests go only to Google Fonts and the public GitHub API.

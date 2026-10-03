@@ -2,25 +2,33 @@ import * as T from './vendor/three.module.min.js';
 import { buildWorld } from './world.js';
 import { buildNeighborhood } from './neighborhood.js';
 import { createResidents } from './interactions.js';
+import { createAtmosphere } from './atmosphere.js';
 import { projects } from './projects.js';
 import { getHeadCorners, projectHead, placeHotspot } from './hotspot-layout.js';
 
-// Rendering is demand-driven: animate camera transitions and short idle moments,
-// then stop. There is no permanent 60fps loop, bloom pass, shadow map or physics.
-export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
+// Rendering is demand driven with one exception: a short "ambient life" window
+// (petals, twinkling stars, blinking resident) that runs at a capped frame rate
+// and goes to sleep after 90 seconds without interaction. It never runs with
+// reduced motion, in background tabs, offscreen, or on the lowest quality tier.
+const AMBIENT_MS = 90000;
+const capture = /[?&]capture\b/.test(location.search);
+
+export async function createScene(host, { onSelect, onSlow, onPanelRect, onHover = () => {}, onIntro = () => {} }) {
   let mobile = matchMedia('(max-width:700px)').matches;
-  const renderer = new T.WebGLRenderer({ antialias: !mobile, powerPreference: 'low-power', alpha: false });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, mobile ? 1 : 1.5));
+  const modest = mobile || navigator.deviceMemory <= 4 || navigator.hardwareConcurrency <= 4;
+  let quality = capture ? 'high' : modest ? 'medium' : 'high';
+  const pixelRatio = () => Math.min(devicePixelRatio || 1, quality === 'high' ? 1.75 : quality === 'medium' ? (mobile ? 1.25 : 1.5) : 1);
+  const renderer = new T.WebGLRenderer({ antialias: !mobile, powerPreference: mobile ? 'low-power' : 'high-performance', alpha: false, preserveDrawingBuffer: capture });
+  renderer.setPixelRatio(pixelRatio());
   renderer.outputColorSpace = T.SRGBColorSpace;
-  renderer.setClearColor(0x111b2e);
+  renderer.setClearColor(0x1d1a33);
+  renderer.shadowMap.type = T.PCFSoftShadowMap;
   host.appendChild(renderer.domElement);
   renderer.domElement.setAttribute('aria-hidden', 'true');
   const scene = new T.Scene();
-  scene.fog = new T.Fog(0x111b2e, 24, 65);
+  scene.fog = new T.Fog(0x241f3d, 24, 70);
   const camera = new T.PerspectiveCamera(36, 1, .1, 100);
-  const hemi = new T.HemisphereLight(0xbad5ed, 0x5b4057, 1.3); scene.add(hemi);
-  const key = new T.DirectionalLight(0xffd2a1, 1.65); key.position.set(-3, 8, 5); scene.add(key);
-  const fill = new T.DirectionalLight(0x8faedf, .65); fill.position.set(7, 4, -3); scene.add(fill);
+
   function makeLabel(lines, { background = '#1b3338', color = '#dfe3c5', size = 55 } = {}) {
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = lines.length > 1 ? 256 : 128;
@@ -60,14 +68,38 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
     items.forEach((item, i) => { dummy.position.set(item.x, item.y, item.z); dummy.scale.set(item.w, item.h, item.d); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); });
     mesh.instanceMatrix.needsUpdate = true; scene.add(mesh); return mesh;
   }
-  instanceBoxes(cityBoxes, 0x202d44); instanceBoxes(windows, 0x897464);
-  const moon = new T.Mesh(new T.SphereGeometry(1.45, 24, 16), new T.MeshBasicMaterial({ color: 0xf4d2b5 }));
-  moon.position.set(-5.5, 9.2, -23); scene.add(moon);
-  // Static atmospheric points. These are not continuously simulated particles.
-  const stars = new Float32Array(95 * 3);
-  for (let i = 0; i < 95; i++) stars.set([(random() - .5) * 65, random() * 18 + 6, -30 - random() * 15], i * 3);
-  const starGeometry = new T.BufferGeometry(); starGeometry.setAttribute('position', new T.BufferAttribute(stars, 3));
-  scene.add(new T.Points(starGeometry, new T.PointsMaterial({ color: 0xd9c5bc, size: .05, transparent: true, opacity: .5 })));
+  instanceBoxes(cityBoxes, 0x1f2440); instanceBoxes(windows, 0xd6a874);
+  const beaconSpots = [...cityBoxes].sort((a, b) => (b.y + b.h / 2) - (a.y + a.h / 2)).slice(0, 9)
+    .map(box => new T.Vector3(box.x, box.y + box.h / 2 + .14, box.z));
+  const atmosphere = createAtmosphere(scene, world, { quality, random, beaconSpots });
+
+  // A three step ramp gives the toon materials crisp, anime style shading.
+  const ramp = new T.DataTexture(new Uint8Array([96, 178, 255]), 3, 1, T.RedFormat);
+  ramp.minFilter = ramp.magFilter = T.NearestFilter; ramp.generateMipmaps = false; ramp.needsUpdate = true;
+  const toonMaterials = new Set(), shadowCasters = [];
+  scene.traverse(item => {
+    if (!item.isMesh) return;
+    if (item.material?.isMeshToonMaterial) {
+      if (!item.material.userData.ownRamp) item.material.gradientMap = ramp;
+      toonMaterials.add(item.material);
+    }
+    if (world.root.getObjectById(item.id) && item.material?.isMeshToonMaterial) shadowCasters.push(item);
+  });
+
+  function setQuality(level) {
+    quality = level;
+    const shadows = level === 'high' && !mobile;
+    if (renderer.shadowMap.enabled !== shadows) {
+      renderer.shadowMap.enabled = shadows; atmosphere.moonLight.castShadow = shadows;
+      // Anime faces and hair take no cast shadows; they still cast their own.
+      shadowCasters.forEach(item => { item.castShadow = shadows; item.receiveShadow = shadows && !item.material.userData.ownRamp; });
+      toonMaterials.forEach(material => { material.needsUpdate = true; });
+    }
+    atmosphere.setQuality(level);
+    renderer.setPixelRatio(pixelRatio());
+    if (width > 1) renderer.setSize(width, height, false);
+    dirty = true;
+  }
 
   const hotspotElements = Object.fromEntries(Object.keys(world.anchors).map(key => [key, document.querySelector('#hotspot-' + key)]));
   const headCorners = getHeadCorners(world.characterHead);
@@ -80,9 +112,10 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
   const look = new T.Vector3();
   const orbitTarget = new T.Vector3(0, 1.15, 0);
   let width = 1, height = 1, view = 'home', enabled = true, visible = true, motion = true, lost = false;
-  let raf = 0, last = 0, animation = null, dirty = true, idleUntil = 0;
-  let yaw = .69, tilt = .6, zoom = 1, drag = null, lastDragAt = 0;
-  let lagFrames = 0, lagTotal = 0;
+  let raf = 0, last = 0, animation = null, dirty = true, ambientUntil = 0;
+  let yaw = .69, tilt = .6, zoom = 1, drag = null, lastDragAt = 0, hovered = null;
+  let lagFrames = 0, lagTotal = 0, nextBlink = 0, blinkUntil = 0, eyesClosed = false;
+  const parallax = { x: 0, y: 0, tx: 0, ty: 0 };
   const ray = new T.Raycaster(), pointer = new T.Vector2(), projected = new T.Vector3();
   const offset = new T.Vector2();
   const screenHalf = new T.Vector3(world.screenWidth / 2, world.screenHeight / 2, 0);
@@ -90,8 +123,17 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
     const aspect = width / height;
     const distance = (mobile ? Math.max(22, 15.5 / aspect) : aspect < 1.4 ? 18.5 : 16.8) * zoom;
     const target = orbitTarget.clone();
-    const position = new T.Vector3(Math.sin(yaw) * Math.cos(tilt), Math.sin(tilt), Math.cos(yaw) * Math.cos(tilt)).multiplyScalar(distance).add(target);
+    const y = yaw + parallax.x * .045, t = tilt - parallax.y * .03;
+    const position = new T.Vector3(Math.sin(y) * Math.cos(t), Math.sin(t), Math.cos(y) * Math.cos(t)).multiplyScalar(distance).add(target);
     return { position, target, offset: new T.Vector2(0, 0) };
+  }
+  // The opening shot looks up at the moon, then cranes down onto the roof.
+  function introPose() {
+    const home = homePose();
+    const position = home.position.clone().multiplyScalar(1.35).setY(3.4);
+    const moon = new T.Vector3(-.34, .4, -.85).normalize();
+    const direction = new T.Vector3(moon.x * 1.25, moon.y * .62, moon.z).normalize();
+    return { position, target: position.clone().add(direction.multiplyScalar(30)), offset: new T.Vector2(0, 0) };
   }
   function poseFor(name) {
     if (name === 'home') return homePose();
@@ -142,37 +184,73 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
     if (!enabled || !visible || document.hidden || lost || width < 2) return;
     camera.lookAt(look); camera.updateMatrixWorld(true);
     if (view === 'home') world.faceViewer(camera.position);
+    atmosphere.follow(camera);
     renderer.render(scene, camera); positionUI(); dirty = false;
   }
   function requestFrame() { if (!raf && enabled && visible && !document.hidden && !lost) raf = requestAnimationFrame(tick); }
+  const ambientOn = now => motion && quality !== 'low' && now < ambientUntil;
+  function wake() { ambientUntil = performance.now() + AMBIENT_MS; requestFrame(); }
+
+  // Small signs of life: blinking, breathing, a lazy tail, swaying lanterns.
+  function lifeTick(now) {
+    const t = now / 1000;
+    world.lanterns.forEach((lantern, i) => { lantern.rotation.z = Math.sin(now * .0007 + i) * .045; });
+    if (now > nextBlink) { blinkUntil = now + 130; nextBlink = now + 2400 + random() * 3400; if (random() < .2) nextBlink = now + 320; }
+    const closed = now < blinkUntil;
+    if (closed !== eyesClosed) { eyesClosed = closed; world.blink(closed); }
+    world.torso.scale.y = 1 + Math.sin(t * 1.7) * .012;
+    world.characterHead.position.y = 1.27 + Math.sin(t * 1.7 - .5) * .006;
+    if (!residents.active) {
+      world.catBody.scale.y = .7 + Math.sin(t * 1.9) * .02;
+      world.catTail.rotation.y = Math.sin(t * .8) * .14;
+    }
+  }
+  function openEyes() { world.blink(false); eyesClosed = false; blinkUntil = 0; }
+  let wasAmbient = false;
+  const ease = progress => progress < .5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
   function tick(now) {
     raf = 0;
     if (!enabled || !visible || document.hidden || lost) return;
     const delta = now - last;
-    if (delta < (mobile ? 32 : 23)) { requestFrame(); return; } // cap desktop at ~40fps, phone at ~30fps
+    const busy = animation || drag || residents.active;
+    const ambient = ambientOn(now);
+    // Interactions may run near 60fps; ambient-only frames are capped lower.
+    const minimum = busy ? (mobile ? 30 : 15) : (mobile ? 38 : 30);
+    if (delta < minimum) { requestFrame(); return; }
     last = now;
+    const dt = Math.min(.1, delta / 1000);
     if (animation) {
-      const progress = Math.min(1, (now - animation.start) / animation.duration);
-      const eased = progress < .5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
+      const progress = Math.min(1, Math.max(0, (now - animation.start) / animation.duration));
+      const eased = ease(progress);
       camera.position.lerpVectors(animation.from.position, animation.to.position, eased);
       look.lerpVectors(animation.from.target, animation.to.target, eased);
       offset.lerpVectors(animation.from.offset, animation.to.offset, eased);
       camera.setViewOffset(width, height, offset.x, offset.y, width, height);
       dirty = true;
-      if (progress === 1) { const resolve = animation.resolve; animation = null; render(); resolve(true); }
+      if (progress === 1) { const { resolve, intro } = animation; animation = null; if (intro) onIntro(false); render(); resolve(true); }
     }
-    if (motion && view === 'home' && now < idleUntil && !drag) {
-      world.lanterns.forEach((lantern, i) => { lantern.rotation.z = Math.sin(now * .0007 + i) * .045; });
-      dirty = true;
+    if (wasAmbient && !ambient) { openEyes(); dirty = true; }
+    wasAmbient = ambient;
+    if (ambient) {
+      atmosphere.update(now, dt); lifeTick(now); dirty = true;
+      if (view === 'home' && !animation && !drag) {
+        const before = parallax.x + parallax.y;
+        parallax.x += (parallax.tx - parallax.x) * Math.min(1, dt * 2.5);
+        parallax.y += (parallax.ty - parallax.y) * Math.min(1, dt * 2.5);
+        if (Math.abs(parallax.x + parallax.y - before) > 1e-5) setCamera(homePose());
+      }
     }
     if (residents.active) { residents.tick(now); dirty = true; }
     if (dirty) render();
-    const continuing = animation || drag || residents.active || (motion && view === 'home' && now < idleUntil);
-    if (continuing) {
-      if (delta > 0 && delta < 250) {
+    if (animation || drag || residents.active || ambient) {
+      if (!capture && delta > 0 && delta < 250) {
         lagFrames++; lagTotal += delta;
-        if (lagFrames >= 75) {
-          if (lagTotal / lagFrames > 70) { enabled = false; settleAnimation(false); onSlow(); return; }
+        if (lagFrames >= 90) {
+          // Sustained slow frames step quality down: high, medium, then static.
+          if (lagTotal / lagFrames > Math.max(66, minimum * 2.1)) {
+            if (quality === 'high') setQuality('medium');
+            else if (quality === 'medium') { setQuality('low'); onSlow(); }
+          }
           lagFrames = 0; lagTotal = 0;
         }
       }
@@ -180,19 +258,23 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
     }
   }
   function settleAnimation(completed = false) {
-    if (animation) { const pending = animation; animation = null; pending.resolve(completed); }
+    if (animation) { const pending = animation; animation = null; if (pending.intro) onIntro(false); pending.resolve(completed); }
   }
   function stop() { cancelAnimationFrame(raf); raf = 0; }
   function resize() {
     width = Math.max(1, host.clientWidth); height = Math.max(1, host.clientHeight);
     mobile = width <= 700;
     measureHotspots();
-    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, mobile ? 1 : 1.5));
+    renderer.setPixelRatio(pixelRatio());
     renderer.setSize(width, height, false); camera.aspect = width / height;
-    settleAnimation(false); setCamera(poseFor(view)); dirty = true; render();
+    // A resize during the opening shot retargets it rather than cutting it short.
+    if (animation?.intro) animation.to = homePose();
+    else { settleAnimation(false); setCamera(poseFor(view)); }
+    dirty = true; render();
   }
   function focus(name, instant = false) {
-    settleAnimation(false); view = name; drag = null;
+    if (name === view && animation?.intro) return animation.promise;
+    settleAnimation(false); view = name; drag = null; wake();
     if (name !== 'home') residents.finish();
     const target = poseFor(name);
     if (!enabled || lost || !motion || instant || document.hidden) {
@@ -203,12 +285,22 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
       last = performance.now(); requestFrame();
     });
   }
+  function intro() {
+    if (!motion || capture || view !== 'home' || !enabled || lost) return Promise.resolve(false);
+    settleAnimation(false);
+    const from = introPose(), to = homePose();
+    setCamera(from); render(); onIntro(true);
+    let resolve; const promise = new Promise(done => { resolve = done; });
+    animation = { from, to, start: performance.now() + 250, duration: mobile ? 2600 : 3400, resolve, promise, intro: true };
+    last = performance.now(); wake(); return promise;
+  }
   function hitTest(event) {
     const bounds = host.getBoundingClientRect();
     pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
     ray.setFromCamera(pointer, camera); return ray.intersectObjects(world.pickables, false)[0]?.object.userData.view;
   }
   host.addEventListener('pointerdown', event => {
+    wake();
     if (view !== 'home' || !enabled || event.button !== 0) return;
     drag = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, moved: false, id: event.pointerId };
     host.setPointerCapture(event.pointerId);
@@ -225,13 +317,24 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
         setCamera(homePose()); dirty = true; requestFrame(); host.style.cursor = 'grabbing';
       }
       drag.x = event.clientX; drag.y = event.clientY;
-    } else host.style.cursor = hitTest(event) ? 'pointer' : 'grab';
+    } else {
+      const hit = hitTest(event);
+      host.style.cursor = hit ? 'pointer' : 'grab';
+      if (hit !== hovered) { hovered = hit; onHover(hit || null); }
+      if (event.pointerType === 'mouse') {
+        const bounds = host.getBoundingClientRect();
+        parallax.tx = (event.clientX - bounds.left) / bounds.width * 2 - 1;
+        parallax.ty = (event.clientY - bounds.top) / bounds.height * 2 - 1;
+      }
+      if (performance.now() > ambientUntil - AMBIENT_MS + 1000) wake();
+    }
   });
+  host.addEventListener('pointerleave', () => { parallax.tx = parallax.ty = 0; if (hovered) { hovered = null; onHover(null); } });
   function endDrag(event) {
     if (!drag || event.pointerId !== drag.id) return;
     const moved = drag.moved; drag = null; host.style.cursor = 'grab';
     if (host.hasPointerCapture(event.pointerId)) host.releasePointerCapture(event.pointerId);
-    if (moved) { lastDragAt = performance.now(); idleUntil = performance.now() + 1500; }
+    if (moved) lastDragAt = performance.now();
     if (event.type === 'pointerup' && !moved && performance.now() - lastDragAt > 150) {
       const hit = hitTest(event); if (hit) onSelect(hit);
     }
@@ -239,6 +342,7 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
   host.addEventListener('pointerup', endDrag);
   host.addEventListener('pointercancel', endDrag);
   host.addEventListener('lostpointercapture', () => { drag = null; });
+  addEventListener('keydown', wake);
   const resizeObserver = new ResizeObserver(resize); resizeObserver.observe(host);
   const hotspotObserver = new ResizeObserver(() => { measureHotspots(); dirty = true; requestFrame(); });
   Object.values(hotspotElements).forEach(element => hotspotObserver.observe(element));
@@ -248,11 +352,11 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
   }); observer.observe(host);
   const visibilityChanged = () => {
     if (document.hidden) { stop(); settleAnimation(false); residents.finish(); }
-    else { setCamera(poseFor(view)); dirty = true; requestFrame(); }
+    else { setCamera(poseFor(view)); dirty = true; wake(); }
   };
   document.addEventListener('visibilitychange', visibilityChanged);
   renderer.domElement.addEventListener('webglcontextlost', event => {
-    event.preventDefault(); lost = true; stop(); settleAnimation(false); onSlow();
+    event.preventDefault(); lost = true; stop(); settleAnimation(false); onSlow(true);
   });
   let previewSequence = 0, previewId;
   function setProjectPreview(image, name = 'PROJECT ARCHIVE') {
@@ -266,28 +370,36 @@ export async function createScene(host, { onSelect, onSlow, onPanelRect }) {
     }
     if (!image) { use(makeLabel([name.toUpperCase(), 'SOURCE AVAILABLE'], { size: 40 })); return; }
     new T.TextureLoader().load('/assets/' + image + '.webp', texture => {
-      texture.anisotropy = Math.min(2, renderer.capabilities.getMaxAnisotropy()); use(texture);
+      texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy()); use(texture);
     }, undefined, () => { if (sequence === previewSequence) use(makeLabel([name.toUpperCase(), 'OPEN PROJECT ARCHIVE'], { size: 38 })); });
   }
   setProjectPreview('plot', 'Plot');
+  setQuality(quality);
+  atmosphere.settle();
   resize(); host.classList.add('ready'); host.style.cursor = 'grab';
-  idleUntil = performance.now() + 5000; last = performance.now(); requestFrame();
+  last = performance.now(); wake();
+  if (capture) window.__hideout = {
+    pose(position, target) { setCamera({ position: new T.Vector3(...position), target: new T.Vector3(...target), offset: new T.Vector2() }); dirty = true; render(); },
+    // Holds the eyes open or shut (motion off stops the idle blink from overriding it).
+    blink(closed) { motion = false; wasAmbient = false; world.blink(closed); dirty = true; render(); }
+  };
   return {
-    focus, setProjectPreview,
-    playCat() { if (!enabled || lost) return; residents.playCat(performance.now(), motion); dirty = true; requestFrame(); },
-    wave() { const result = residents.wave(performance.now(), motion && enabled && !lost); dirty = true; requestFrame(); return result; },
+    focus, setProjectPreview, intro,
+    playCat() { if (!enabled || lost) return; wake(); residents.playCat(performance.now(), motion); dirty = true; requestFrame(); },
+    wave() { wake(); const result = residents.wave(performance.now(), motion && enabled && !lost); dirty = true; requestFrame(); return result; },
     setMotion(value) {
       motion = value;
       if (!value && animation) { const destination = animation.to; settleAnimation(true); setCamera(destination); }
-      if (!value) { residents.finish(); stop(); dirty = true; render(); }
-      else { idleUntil = performance.now() + 4000; requestFrame(); }
+      if (!value) { residents.finish(); openEyes(); parallax.x = parallax.y = parallax.tx = parallax.ty = 0; setCamera(poseFor(view)); stop(); dirty = true; render(); }
+      else wake();
     },
     setEnabled(value) {
       enabled = value && !lost;
-      if (value && lost) { onSlow(); return; }
-      if (enabled) { measureHotspots(); dirty = true; requestFrame(); }
+      if (value && lost) { onSlow(true); return; }
+      if (enabled) { measureHotspots(); dirty = true; wake(); }
       else { residents.finish(); stop(); settleAnimation(false); }
     },
-    stats() { return { drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, textures: renderer.info.memory.textures, idle: !raf }; }
+    get quality() { return quality; },
+    stats() { return { drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles, textures: renderer.info.memory.textures, quality, idle: !raf }; }
   };
 }
