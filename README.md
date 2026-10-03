@@ -93,4 +93,4 @@ It covers:
 Visuals were reviewed with headless Chrome screenshots; real-device frame rates are not measured.
 
 ## Serving
-Static hosting of `dist/`, with identity in `.openai/hosting.json`. No server keys, wallet connections or paid API calls. Runtime requests go only to Google Fonts and the public GitHub API.
+Static hosting of `dist/`. On Vercel, `vercel.json` serves `dist/` with no install or build step and uses `404.html` for missing pages; import the repo with default settings. The earlier host identity is in `.openai/hosting.json`. No server keys, wallet connections or paid API calls. Runtime requests go only to Google Fonts and the public GitHub API.
